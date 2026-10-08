@@ -18,8 +18,8 @@ __all__ = (
 
 
 def get_server_configuration_as_json(
-    app: "SkybrushServer", *, compact: bool = False
-) -> "Configuration":
+    app: SkybrushServer, *, compact: bool = False
+) -> Configuration:
     """Returns the entire configuration of the server application as a JSON
     object. This may be used for debugging purposes if we want a full snapshot
     that contains the configuration of all the loaded extensions.
@@ -29,8 +29,8 @@ def get_server_configuration_as_json(
         compact: whether to return a compact representation that includes only
             the differences from the base configuration of the server
     """
-    config: "Configuration"
-    defaults: "Configuration"
+    config: Configuration
+    defaults: Configuration
 
     config = deepcopy(app.configurator.result)
 
@@ -103,7 +103,7 @@ def can_save_server_configuration(app: SkybrushServer | None) -> bool:
     return True
 
 
-async def save_server_configuration(app: "SkybrushServer") -> bool:
+async def save_server_configuration(app: SkybrushServer) -> bool:
     """Saves the current configuration of the server application, overwriting
     the configuration file that was loaded the last time.
     """

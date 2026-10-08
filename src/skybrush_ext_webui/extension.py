@@ -85,7 +85,7 @@ class ExtensionInfo:
 
     @classmethod
     def for_extension(
-        cls, name: str, ext_manager: "ExtensionManager", *, details: bool = False
+        cls, name: str, ext_manager: ExtensionManager, *, details: bool = False
     ):
         result = cls(name=name, loaded=ext_manager.is_loaded(name))
         result.description = ext_manager.get_description_of_extension(name) or ""
@@ -130,7 +130,7 @@ def only_when_debugging(func: Callable[..., Awaitable[Any]]):
     return decorated
 
 
-def _get_extension_by_name(name: str) -> tuple[ExtensionInfo, "ExtensionManager"]:
+def _get_extension_by_name(name: str) -> tuple[ExtensionInfo, ExtensionManager]:
     extension_manager = app.extension_manager if app else None
     if extension_manager and name in extension_manager.known_extensions:
         try:
@@ -153,7 +153,7 @@ def _get_extension_by_name(name: str) -> tuple[ExtensionInfo, "ExtensionManager"
 
 async def _configure_extension_from_request_body_if_needed(
     name: str,
-) -> "ExtensionManager":
+) -> ExtensionManager:
     _, extension_manager = _get_extension_by_name(name)
 
     data = await request.get_json()
