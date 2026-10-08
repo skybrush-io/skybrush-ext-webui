@@ -1,0 +1,9 @@
+# Changes here will be overwritten by Copier
+_commit: 1.3.3
+_src_path: https://github.com/skybrush-io/skybrush-ext-template.git
+extension_class_name: WebUIExtension
+extension_description: Web-based configuration user interface for Skybrush Server
+extension_name: webui
+module_name: skybrush_ext_webui
+user_email: ntamas@protonmail.ch
+user_name: Tamas Nepusz

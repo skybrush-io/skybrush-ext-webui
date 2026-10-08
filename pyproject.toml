@@ -1,0 +1,46 @@
+[project]
+name = "skybrush_ext_webui"
+version = "1.0.0"
+description = "Web-based configuration user interface for Skybrush Server"
+authors = [{ name = "Tamas Nepusz", email = "ntamas@protonmail.ch" }]
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = []
+
+[dependency-groups]
+dev = ["flockwave-server>=2.52.0"]
+
+[project.entry-points."skybrush.server.ext"]
+# Change the key below to the name of the extension that you want to use in
+# configuration files, and the value to the name of the Python module that
+# contains the extension code
+webui = "skybrush_ext_webui"
+
+[project.scripts]
+skybrushd = "flockwave.server.launcher:start"
+
+[tool.ruff]
+lint.ignore = [
+  "C901", # function is too complex
+  "S101", # assert
+]
+lint.select = [
+  "B", # flake8-bugbear
+  "C", # flake8-comprehensions
+  "E", # pycodestyle errors
+  "F", # pyflakes
+  "I", # isort
+  "S", # flake8-bandit
+  "W", # pycodestyle warnings
+]
+
+[[tool.uv.index]]
+name = "fury"
+url = "https://pypi.fury.io/skybrush/"
+
+[tool.uv.sources]
+flockwave-server = { index = "fury" }
+
+[build-system]
+requires = ["uv_build>=0.12,<0.13"]
+build-backend = "uv_build"
