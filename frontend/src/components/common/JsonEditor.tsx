@@ -91,6 +91,7 @@ export function JsonEditor({
         ? [
             // Must take precedence over Mod-Enter in the default keymap
             Prec.highest(
+              // oxlint-disable-next-line react/refs -- the ref is read on key press, not during render
               keymap.of([
                 {
                   key: 'Mod-Enter',
