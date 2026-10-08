@@ -1,6 +1,6 @@
 [project]
 name = "skybrush-ext-webui"
-version = "1.0.0"
+version = "1.0.1"
 description = "Web-based configuration user interface for Skybrush Server"
 authors = [{ name = "Tamas Nepusz", email = "ntamas@protonmail.ch" }]
 license = "MIT"
