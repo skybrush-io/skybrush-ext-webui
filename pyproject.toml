@@ -8,7 +8,7 @@ requires-python = ">=3.10"
 dependencies = []
 
 [dependency-groups]
-dev = ["flockwave-server>=2.52.0"]
+dev = ["flockwave-server>=2.56.0"]
 
 [project.entry-points."skybrush.server.ext"]
 # Change the key below to the name of the extension that you want to use in

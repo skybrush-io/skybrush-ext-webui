@@ -15,6 +15,8 @@ from operator import attrgetter
 from typing import TYPE_CHECKING, Any
 
 from flockwave.ext.errors import NotSupportedError
+from flockwave.server.ext.frontend import FrontendExtensionAPI
+from flockwave.server.ext.http_server import HTTPServerExtensionAPI
 from flockwave.server.utils import overridden
 from flockwave.server.utils.quart import make_blueprint
 from quart import abort, make_response, redirect, render_template, request, url_for
@@ -55,8 +57,8 @@ async def run(app: SkybrushServer, configuration: WebUIExtensionConfig, logger: 
     """Runs the extension."""
     global is_public
 
-    frontend = app.import_api("frontend")
-    http_server = app.import_api("http_server")
+    frontend = app.import_api("frontend", FrontendExtensionAPI)
+    http_server = app.import_api("http_server", HTTPServerExtensionAPI)
     path = configuration.route
     is_public = configuration.public
 
