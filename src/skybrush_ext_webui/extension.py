@@ -23,6 +23,7 @@ from quart import abort, make_response, redirect, render_template, request, url_
 from trio import sleep_forever
 from trio.lowlevel import current_root_task
 
+from .frontend import get_frontend_assets
 from .utils import (
     can_save_server_configuration,
     get_server_configuration_as_json,
@@ -103,6 +104,21 @@ class ExtensionInfo:
                 ext_manager.get_reverse_dependencies_of_extension(name)
             )
 
+        return result
+
+    def to_json(self, *, details: bool = False) -> dict[str, Any]:
+        """Returns a JSON-serializable representation of the extension info."""
+        result: dict[str, Any] = {
+            "name": self.name,
+            "description": self.description,
+            "loaded": self.loaded,
+            "tags": self.tags,
+            "restartRequested": self.restart_requested,
+            "version": str(self.version) if self.version is not None else None,
+        }
+        if details:
+            result["dependencies"] = self.dependencies
+            result["dependents"] = self.dependents
         return result
 
 
@@ -197,6 +213,104 @@ async def _to_json(
     return {"result": on_success} if result is None else {"result": result}
 
 
+def _get_state() -> dict[str, Any]:
+    """Returns the global state of the server that the frontend needs on every
+    page.
+    """
+    return {
+        "canSaveConfig": can_save_server_configuration(app),
+        "debug": is_debugging(),
+        "restartRequested": (
+            app.extension_manager.app_restart_requested if app else False
+        ),
+    }
+
+
+def _get_distributions() -> list[dict[str, Any]]:
+    """Returns the name, version and summary of all the Python packages
+    installed in the environment of the server.
+    """
+    from importlib import metadata
+
+    result: list[dict[str, Any]] = []
+    for dist in metadata.distributions():
+        name = dist.metadata.get("Name")
+        if not name:
+            continue
+        result.append(
+            {
+                "name": name,
+                "version": dist.version or None,
+                "summary": dist.metadata.get("Summary") or "",
+            }
+        )
+
+    result.sort(key=lambda item: item["name"].lower())
+    return result
+
+
+def _get_extensions() -> list[ExtensionInfo]:
+    """Returns information about all the extensions currently known to the
+    server.
+    """
+    extension_manager = app.extension_manager if app else None
+    extensions: list[ExtensionInfo] = []
+
+    if extension_manager:
+        for name in extension_manager.known_extensions:
+            try:
+                info = ExtensionInfo.for_extension(name, extension_manager)
+                extensions.append(info)
+            except ModuleNotFoundError:
+                # The configuration somehow refers to an extension that does not
+                # exist; this is okay, we just ignore it
+                pass
+            except Exception:
+                # error while importing extension; let's log it an ignore it
+                if log:
+                    log.warning(f"Error while importing extension: {name!r}")
+
+    return extensions
+
+
+def _get_tasks() -> list[dict[str, Any]]:
+    """Returns all active Trio tasks in the server in depth-first order, along
+    with their nesting levels.
+    """
+    tasks: list[dict[str, Any]] = []
+    queue: list[tuple[int, Any]] = [(0, current_root_task())]
+    while queue:
+        level, task = queue.pop()
+        tasks.append({"level": level, "name": task.name})
+        for nursery in task.child_nurseries:
+            queue.extend(
+                (level + 1, task)
+                for task in sorted(
+                    nursery.child_tasks, key=attrgetter("name"), reverse=True
+                )
+            )
+    return tasks
+
+
+def _get_threads() -> list[dict[str, Any]]:
+    """Returns all active threads in the server."""
+    return [
+        {"ident": thread.ident, "name": thread.name, "daemon": thread.daemon}
+        for thread in threading.enumerate()
+    ]
+
+
+async def _render_app(title: str):
+    """Renders the HTML page that bootstraps the frontend application."""
+    assets = get_frontend_assets()
+    if assets is None:
+        return await render_template("frontend_missing.html.j2", title=title), 503
+
+    return await render_template(
+        "app.html.j2", title=title, assets=assets, initial_state=_get_state()
+    )
+
+
 #############################################################################
 # Route definitions
 
@@ -213,24 +327,117 @@ def fail_if_not_localhost() -> None:
             abort(403)
 
 
-@blueprint.context_processor
-def inject_debug_variable() -> dict[str, Any]:
-    """Injects the `can_save_config`, `debug` and `restart_requested` variables
-    into all template contexts.
-    """
-    return {
-        "can_save_config": can_save_server_configuration(app),
-        "debug": is_debugging(),
-        "restart_requested": (
-            app.extension_manager.app_restart_requested if app else False
-        ),
-    }
-
-
 @blueprint.route("/")
 async def index():
     """Returns the index page of the extension."""
     return redirect(url_for(".list_extensions"))
+
+
+#############################################################################
+# Pages served by the frontend application
+
+
+@blueprint.route("/extensions")
+async def list_extensions():
+    """Returns the page that lists all the extensions currently known to the
+    server and allows the user to load or unload them.
+    """
+    return await _render_app("Extensions")
+
+
+@blueprint.route("/extensions/<name>")
+async def show_extension_details(name):
+    """Returns the page that shows the details and configuration of an extension
+    of the server.
+    """
+    _get_extension_by_name(name)
+    return await _render_app(f"Extension: {name}")
+
+
+@blueprint.route("/version-info")
+async def version_info():
+    """Returns the page that shows the version information of the server
+    and the Python packages that it depends on.
+    """
+    return await _render_app("Version Info")
+
+
+@blueprint.route("/messages")
+@only_when_debugging
+async def send_messages():
+    """Returns the page that allows the user to send messages to the server."""
+    return await _render_app("Messages")
+
+
+@blueprint.route("/threads")
+@only_when_debugging
+async def list_threads():
+    """Returns the page that lists all active threads in the server."""
+    return await _render_app("Threads")
+
+
+@blueprint.route("/tasks")
+@only_when_debugging
+async def list_tasks():
+    """Returns the page that lists all active Trio tasks in the server."""
+    return await _render_app("Tasks")
+
+
+#############################################################################
+# JSON API used by the frontend application
+
+
+@blueprint.route("/api/state")
+async def get_state_json():
+    """Returns the global state of the server that the frontend needs."""
+    return _get_state()
+
+
+@blueprint.route("/api/extensions")
+async def list_extensions_json():
+    """Returns the list of all the extensions currently known to the server."""
+    return {"extensions": [ext.to_json() for ext in _get_extensions()]}
+
+
+@blueprint.route("/api/extensions/<name>")
+async def get_extension_details_json(name):
+    """Returns the details, the current configuration and the configuration
+    schema of an extension of the server.
+    """
+    extension, extension_manager = _get_extension_by_name(name)
+    config = extension_manager.get_configuration_snapshot(name)
+    if isinstance(config, dict):
+        config.pop("enabled", None)
+
+    return {
+        **extension.to_json(details=True),
+        "config": config,
+        "schema": extension_manager.get_configuration_schema(name),
+    }
+
+
+@blueprint.route("/api/version-info")
+async def get_version_info_json():
+    """Returns the versions of the Python packages installed on the server."""
+    return {"distributions": _get_distributions()}
+
+
+@blueprint.route("/api/threads")
+@only_when_debugging
+async def list_threads_json():
+    """Returns all active threads in the server."""
+    return {"threads": _get_threads()}
+
+
+@blueprint.route("/api/tasks")
+@only_when_debugging
+async def list_tasks_json():
+    """Returns all active Trio tasks in the server."""
+    return {"tasks": _get_tasks()}
+
+
+#############################################################################
+# Configuration export and actions
 
 
 @blueprint.route("/config", defaults={"as_attachment": False, "compact": False})
@@ -268,105 +475,6 @@ async def save_configuration():
         abort(403)
 
     return await _to_json(save_server_configuration, app, on_success=True)
-
-
-@blueprint.route("/extensions")
-async def list_extensions():
-    """Returns a page that lists all the extensions currently known to the
-    server and allows the user to load or unload them.
-    """
-    extension_manager = app.extension_manager if app else None
-    extensions: list[ExtensionInfo] = []
-
-    if extension_manager:
-        for name in extension_manager.known_extensions:
-            try:
-                info = ExtensionInfo.for_extension(name, extension_manager)
-                extensions.append(info)
-            except ModuleNotFoundError:
-                # The configuration somehow refers to an extension that does not
-                # exist; this is okay, we just ignore it
-                pass
-            except Exception:
-                # error while importing extension; let's log it an ignore it
-                if log:
-                    log.warning(f"Error while importing extension: {name!r}")
-
-    return await render_template(
-        "extensions.html.j2", title="Extensions", extensions=extensions
-    )
-
-
-@blueprint.route("/version-info")
-async def version_info():
-    """Returns a page that shows the version information of the server
-    and the Python packages that it depends on.
-    """
-    from importlib import metadata
-
-    distributions = sorted(metadata.distributions(), key=attrgetter("name"))
-    return await render_template(
-        "version_info.html.j2",
-        title="Version Info",
-        distributions=distributions,
-    )
-
-
-@blueprint.route("/messages")
-@only_when_debugging
-async def send_messages():
-    """Returns a page that allows the user to send messages to the server."""
-    return await render_template("messages.html.j2", title="Messages")
-
-
-@blueprint.route("/threads")
-@only_when_debugging
-async def list_threads():
-    """Returns a page that lists all active threads in the server."""
-    return await render_template(
-        "threads.html.j2", threads=threading.enumerate(), title="Threads"
-    )
-
-
-@blueprint.route("/tasks")
-@only_when_debugging
-async def list_tasks():
-    """Returns a page that lists all active Trio tasks in the server."""
-
-    tasks: list[tuple[str, Any]] = []
-    queue: list[tuple[int, Any]] = [(0, current_root_task())]
-    while queue:
-        level, task = queue.pop()
-        tasks.append(("    " * level, task))
-        for nursery in task.child_nurseries:
-            queue.extend(
-                (level + 1, task)
-                for task in sorted(
-                    nursery.child_tasks, key=attrgetter("name"), reverse=True
-                )
-            )
-
-    return await render_template("tasks.html.j2", title="Tasks", tasks=tasks)
-
-
-@blueprint.route("/extensions/<name>")
-async def show_extension_details(name):
-    """Returns a page that shows the details and configuration of an extension
-    of the server.
-    """
-    extension, extension_manager = _get_extension_by_name(name)
-    config = extension_manager.get_configuration_snapshot(name)
-    if isinstance(config, dict):
-        config.pop("enabled", None)
-
-    schema = extension_manager.get_configuration_schema(name)
-    return await render_template(
-        "extension_details.html.j2",
-        title=f"Extension: {name}",
-        extension=extension,
-        config=config,
-        schema=schema,
-    )
 
 
 @blueprint.route("/extensions/<name>/load", methods=["POST"])

@@ -8,7 +8,11 @@ requires-python = ">=3.10"
 dependencies = []
 
 [dependency-groups]
-dev = ["flockwave-server>=2.56.0"]
+dev = [
+    "flockwave-server>=2.56.0",
+    "pytest>=9.1.1",
+    "pytest-trio>=0.8.0",
+]
 
 [project.entry-points."skybrush.server.ext"]
 # Change the key below to the name of the extension that you want to use in
@@ -45,3 +49,6 @@ flockwave-server = { index = "fury" }
 [build-system]
 requires = ["uv_build>=0.12,<0.13"]
 build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+trio_mode = true

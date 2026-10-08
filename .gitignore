@@ -15,3 +15,6 @@ tmp/
 .venv/
 .vscode/
 __pycache__/
+
+# Frontend build output (built in CI)
+src/skybrush_ext_webui/static/app/

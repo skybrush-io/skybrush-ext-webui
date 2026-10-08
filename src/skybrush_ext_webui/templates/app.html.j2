@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ title }} &mdash; Skybrush Server</title>
+
+    <base href="{{ url_for('.index') }}">
+    <link rel="icon" type="image/svg+xml" href="static/app/favicon.svg">
+
+    {#- Applies the theme before the first paint; keep in sync with lib/theme.tsx #}
+    <script>
+      try {
+        var theme = localStorage.getItem("skybrush-webui-theme");
+        if (theme === "dark" || (theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches)) {
+          document.documentElement.classList.add("dark");
+        }
+      } catch (e) {}
+    </script>
+
+    {%- for path in assets.stylesheets %}
+    <link rel="stylesheet" href="static/{{ path }}">
+    {%- endfor %}
+    {%- for path in assets.preloads %}
+    <link rel="modulepreload" href="static/{{ path }}">
+    {%- endfor %}
+
+    <script id="sb-initial-state" type="application/json">{{ initial_state | tojson }}</script>
+    <script type="module" src="static/{{ assets.script }}"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

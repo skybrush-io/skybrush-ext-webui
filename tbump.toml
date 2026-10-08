@@ -20,6 +20,5 @@ search = 'version = "{current_version}"'
 name = "Run pre-commit hooks"
 cmd = "uv sync && prek run --all-files"
 
-[[after_push]]
-name = "Build"
-cmd = "uv build"
+# Pushing the tag triggers the CI workflow in .github/workflows/ci.yml, which
+# builds the frontend and the Python package and publishes it to Gemfury
