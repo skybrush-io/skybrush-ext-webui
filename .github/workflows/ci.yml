@@ -1,0 +1,109 @@
+name: Build and release
+
+on:
+  push:
+    branches: [main]
+    # Release tags are created by tbump without a "v" prefix
+    tags: ["[0-9]+.[0-9]+.[0-9]+*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Check frontend
+        working-directory: frontend
+        run: |
+          npm run format:check
+          npm run lint
+          npm run typecheck
+          npm test
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+
+      - name: Install project
+        run: uv sync --locked
+
+      - name: Run pre-commit hooks
+        run: uvx prek run --all-files --show-diff-on-failure
+
+      - name: Run Python tests
+        run: uv run --locked pytest
+
+      - name: Build Python package
+        run: uv build
+
+      - name: Check that the package contains the frontend
+        run: |
+          manifest='static/app/.vite/manifest.json'
+          unzip -l dist/*.whl | grep "$manifest" > /dev/null ||
+            { echo "::error::Wheel does not contain the built frontend"; exit 1; }
+          tar tzf dist/*.tar.gz | grep "$manifest" > /dev/null ||
+            { echo "::error::Source package does not contain the built frontend"; exit 1; }
+
+      - name: Upload package
+        uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    name: Publish to Gemfury
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.2.0
+
+      - name: Check that the tag matches the version of the package
+        run: |
+          version="$(uv version --short)"
+          if [ "$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package version $version"
+            exit 1
+          fi
+
+      - name: Download package
+        uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+
+      # Gemfury expects the push token as the username and an empty password
+      - name: Publish package
+        env:
+          UV_PUBLISH_USERNAME: ${{ secrets.GEMFURY_PUSH_TOKEN }}
+        run: uv publish --index fury dist/*
