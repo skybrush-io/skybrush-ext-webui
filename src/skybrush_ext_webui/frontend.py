@@ -7,11 +7,19 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from importlib.resources import files
+from logging import getLogger
 from pathlib import Path
 from typing import Any
 
+from flockwave.server.utils.quart import open_package_resource
+
 __all__ = ("FrontendAssets", "get_frontend_assets")
 
+log = getLogger(__name__)
+
+
+PACKAGE = __name__.rpartition(".")[0]
+"""Name of the package that contains the ``static`` folder."""
 
 APP_FOLDER = "app"
 """Name of the folder within ``static`` where the frontend is built."""
@@ -44,7 +52,7 @@ def get_frontend_assets() -> FrontendAssets | None:
     """
     global _cache
 
-    manifest = files(__package__) / "static" / MANIFEST_PATH
+    manifest = files(PACKAGE) / "static" / MANIFEST_PATH
     mtime: float | None = None
     if isinstance(manifest, Path):
         try:
@@ -57,8 +65,10 @@ def get_frontend_assets() -> FrontendAssets | None:
         return _cache[1]
 
     try:
-        data = json.loads(manifest.read_text(encoding="utf-8"))
+        with open_package_resource(PACKAGE, f"static/{MANIFEST_PATH}") as fp:
+            data = json.loads(fp.read().decode("utf-8"))
     except (OSError, ValueError):
+        log.debug("Failed to load Vite manifest of the frontend", exc_info=True)
         data = None
 
     assets = _parse_manifest(data) if isinstance(data, dict) else None

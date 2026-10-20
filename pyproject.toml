@@ -9,7 +9,7 @@ dependencies = []
 
 [dependency-groups]
 dev = [
-    "flockwave-server>=2.56.0",
+    "flockwave-server>=2.58.2",
     "pytest>=9.1.1",
     "pytest-trio>=0.8.0",
 ]
