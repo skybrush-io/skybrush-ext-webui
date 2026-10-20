@@ -4,15 +4,11 @@ version = "1.1.0"
 description = "Web-based configuration user interface for Skybrush Server"
 authors = [{ name = "Tamas Nepusz", email = "ntamas@protonmail.ch" }]
 license = "MIT"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = []
 
 [dependency-groups]
-dev = [
-    "flockwave-server>=2.58.2",
-    "pytest>=9.1.1",
-    "pytest-trio>=0.8.0",
-]
+dev = ["flockwave-server>=2.58.2", "pytest>=9.1.1", "pytest-trio>=0.8.0"]
 
 [project.entry-points."skybrush.server.ext"]
 # Change the key below to the name of the extension that you want to use in
