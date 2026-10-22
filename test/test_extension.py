@@ -211,3 +211,52 @@ async def test_pages_when_frontend_missing(client, monkeypatch):
     response = await get(client, "/webui/extensions")
     assert response.status_code == 503
     assert "Frontend not built" in await response.get_data(as_text=True)
+
+
+CONFIG = {"EXTENSIONS": {"webui": {"route": "/webui"}}, "PORT": 5000}
+
+
+@pytest.mark.parametrize(
+    ("path", "content_type", "filename"),
+    [
+        ("/webui/config", "application/json", None),
+        ("/webui/config/full", "application/json", None),
+        ("/webui/config/compact", "application/json", None),
+        ("/webui/config.json", "application/json", "config.json"),
+        ("/webui/config/compact.json", "application/json", "config.json"),
+        ("/webui/config.toml", "application/toml", "config.toml"),
+        ("/webui/config/full.toml", "application/toml", "config.toml"),
+        ("/webui/config/compact.toml", "application/toml", "config.toml"),
+    ],
+)
+async def test_export_configuration(client, monkeypatch, path, content_type, filename):
+    import json
+    import tomllib
+
+    calls = []
+
+    def fake_get_config(app, *, compact=False):
+        calls.append(compact)
+        return CONFIG
+
+    monkeypatch.setattr(extension, "get_server_configuration_as_json", fake_get_config)
+
+    response = await get(client, path)
+    assert response.status_code == 200
+    assert response.headers["Content-type"] == content_type
+    disposition = response.headers.get("Content-disposition")
+    if filename is None:
+        assert disposition is None
+    else:
+        assert disposition == f'attachment; filename="{filename}"'
+
+    body = await response.get_data(as_text=True)
+    parse = tomllib.loads if content_type == "application/toml" else json.loads
+    assert parse(body) == CONFIG
+    assert calls == ["compact" in path]
+
+
+@pytest.mark.parametrize("path", ["/webui/config.yaml", "/webui/config/other.json"])
+async def test_export_configuration_unknown_format(client, path):
+    response = await get(client, path)
+    assert response.status_code == 404

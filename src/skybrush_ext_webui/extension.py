@@ -23,6 +23,7 @@ from quart import abort, make_response, redirect, render_template, request, url_
 from trio import sleep_forever
 from trio.lowlevel import current_root_task
 
+from . import toml_writer
 from .frontend import get_frontend_assets
 from .utils import (
     can_save_server_configuration,
@@ -440,28 +441,40 @@ async def list_tasks_json():
 # Configuration export and actions
 
 
-@blueprint.route("/config", defaults={"as_attachment": False, "compact": False})
-@blueprint.route("/config.json", defaults={"as_attachment": True, "compact": False})
-@blueprint.route("/config/full", defaults={"as_attachment": False, "compact": False})
-@blueprint.route(
-    "/config/full.json", defaults={"as_attachment": True, "compact": False}
-)
-@blueprint.route("/config/compact", defaults={"as_attachment": False, "compact": True})
-@blueprint.route(
-    "/config/compact.json", defaults={"as_attachment": True, "compact": True}
-)
-async def get_configuration(as_attachment: bool = False, compact: bool = False):
-    """Returns the current configuration of the server in JSON format."""
+# variant=None stands for the full configuration; it differs from "full" so
+# that Werkzeug does not redirect between the URLs with matching defaults
+@blueprint.route("/config", defaults={"variant": None, "ext": None})
+@blueprint.route("/config.<ext>", defaults={"variant": None})
+@blueprint.route("/config/<any(full, compact):variant>", defaults={"ext": None})
+@blueprint.route("/config/<any(full, compact):variant>.<ext>")
+async def get_configuration(variant: str | None, ext: str | None):
+    """Returns the current configuration of the server in JSON or TOML format.
+
+    URLs with an extension (``.json`` or ``.toml``) send the configuration as
+    a downloadable attachment; URLs without one return JSON for viewing.
+    """
     if app is None:
         abort(403)
     assert app is not None
 
-    config = get_server_configuration_as_json(app, compact=compact)
-    formatted_config = json.dumps(config, indent=2, sort_keys=True)
+    if ext not in (None, "json", "toml"):
+        abort(404)
+
+    config = get_server_configuration_as_json(app, compact=variant == "compact")
+    if ext == "toml":
+        try:
+            formatted_config = toml_writer.dumps(config)
+        except TypeError as ex:
+            abort(422, str(ex))
+        content_type = "application/toml"
+    else:
+        formatted_config = json.dumps(config, indent=2, sort_keys=True)
+        content_type = "application/json"
+
     response = await make_response(formatted_config, 200)
-    response.headers["Content-type"] = "application/json"
-    if as_attachment:
-        response.headers["Content-disposition"] = 'attachment; filename="config.json"'
+    response.headers["Content-type"] = content_type
+    if ext is not None:
+        response.headers["Content-disposition"] = f'attachment; filename="config.{ext}"'
 
     return response
 

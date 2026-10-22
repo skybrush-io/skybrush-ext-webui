@@ -13,11 +13,15 @@ import {
   CommandSeparator,
 } from '@/components/ui/command'
 import { useExtensions, useServerState } from '@/lib/queries'
+import { scoreCommand } from '@/lib/search'
 import { useTheme } from '@/lib/use-theme'
 
 import { getVisibleNavigation } from './navigation'
 import { themeOptions } from './theme-options'
-import { useConfigurationActions } from './use-configuration-actions'
+import {
+  CONFIGURATION_FORMATS,
+  useConfigurationActions,
+} from './use-configuration-actions'
 
 interface CommandMenuProps {
   open: boolean
@@ -56,7 +60,7 @@ export function CommandMenu({ open, onOpenChange }: CommandMenuProps) {
       title="Search"
       description="Jump to a page or extension, or run a command"
     >
-      <Command>
+      <Command filter={scoreCommand}>
         <CommandInput placeholder="Search pages, extensions and commands…" />
         <CommandList>
           <CommandEmpty>No results found.</CommandEmpty>
@@ -105,10 +109,15 @@ export function CommandMenu({ open, onOpenChange }: CommandMenuProps) {
           <CommandSeparator />
 
           <CommandGroup heading="Commands">
-            <CommandItem onSelect={run(exportConfiguration)}>
-              <DownloadIcon />
-              Export configuration
-            </CommandItem>
+            {CONFIGURATION_FORMATS.map((format) => (
+              <CommandItem
+                key={format.value}
+                onSelect={run(() => exportConfiguration(format.value))}
+              >
+                <DownloadIcon />
+                Export configuration as {format.label}
+              </CommandItem>
+            ))}
             {canSave && (
               <CommandItem onSelect={run(saveConfiguration)}>
                 <SaveIcon />

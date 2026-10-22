@@ -41,6 +41,7 @@ import {
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { getExtensionStatus, type ExtensionStatus } from '@/lib/extensions'
 import { useExtensions } from '@/lib/queries'
+import { matchesSearch } from '@/lib/search'
 import type { ExtensionSummary } from '@/lib/types'
 
 type StatusFilter = 'all' | ExtensionStatus
@@ -57,12 +58,9 @@ function isStatusFilter(value: string | null): value is StatusFilter {
 }
 
 function matchesQuery(extension: ExtensionSummary, query: string): boolean {
-  const needle = query.trim().toLowerCase()
-  return (
-    !needle ||
-    extension.name.toLowerCase().includes(needle) ||
-    extension.description.toLowerCase().includes(needle) ||
-    extension.tags.some((tag) => tag.toLowerCase().includes(needle))
+  return matchesSearch(
+    [extension.name, extension.description, ...extension.tags],
+    query,
   )
 }
 
@@ -153,7 +151,7 @@ export default function ExtensionListPage() {
         <SearchInput
           value={filters.query}
           onChange={filters.setQuery}
-          placeholder="Search extensions…"
+          placeholder="Search by name, description or tag…"
         />
         <ToggleGroup
           type="single"
@@ -225,7 +223,7 @@ function TagFilter({
       <DropdownMenuTrigger asChild>
         <Button variant="outline">
           <TagIcon />
-          Tags
+          {selected.length > 1 ? 'Tags (all of)' : 'Tags'}
           {selected.length > 0 && (
             <Badge className="ml-0.5 h-4 min-w-4 px-1 tabular-nums">
               {selected.length}
@@ -234,7 +232,12 @@ function TagFilter({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
-        <DropdownMenuLabel>Show extensions tagged with</DropdownMenuLabel>
+        <DropdownMenuLabel>
+          Show extensions tagged with
+          <span className="block text-xs font-normal text-muted-foreground">
+            all of the selected tags
+          </span>
+        </DropdownMenuLabel>
         {tags.map((tag) => (
           <DropdownMenuCheckboxItem
             key={tag}

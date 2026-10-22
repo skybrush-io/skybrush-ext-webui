@@ -15,11 +15,17 @@ import {
   SidebarRail,
   useSidebar,
 } from '@/components/ui/sidebar'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { useServerState } from '@/lib/queries'
 
 import { getVisibleNavigation, type NavigationItem } from './navigation'
 import {
-  CONFIG_EXPORT_URL,
+  CONFIGURATION_FORMATS,
   useConfigurationActions,
 } from './use-configuration-actions'
 
@@ -106,19 +112,37 @@ function NavigationMenuItem({
 }
 
 function ConfigurationMenu() {
-  const { canSave, saveConfiguration, isSaving } = useConfigurationActions()
+  const { canSave, exportConfiguration, saveConfiguration, isSaving } =
+    useConfigurationActions()
+  const { isMobile } = useSidebar()
 
   return (
     <SidebarGroup className="p-0">
       <SidebarGroupLabel>Configuration</SidebarGroupLabel>
       <SidebarMenu>
         <SidebarMenuItem>
-          <SidebarMenuButton asChild tooltip="Export configuration">
-            <a href={CONFIG_EXPORT_URL} download="config.json">
-              <DownloadIcon />
-              <span>Export</span>
-            </a>
-          </SidebarMenuButton>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <SidebarMenuButton tooltip="Export configuration">
+                <DownloadIcon />
+                <span>Export</span>
+              </SidebarMenuButton>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              side={isMobile ? 'top' : 'right'}
+              align="end"
+              className="min-w-40"
+            >
+              {CONFIGURATION_FORMATS.map((format) => (
+                <DropdownMenuItem
+                  key={format.value}
+                  onSelect={() => void exportConfiguration(format.value)}
+                >
+                  Export as {format.label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </SidebarMenuItem>
         {canSave && (
           <SidebarMenuItem>
